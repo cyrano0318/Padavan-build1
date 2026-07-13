@@ -1,154 +1,348 @@
 name: Build Padavan Firmware
+
+
 on:
   workflow_dispatch:
+
+
+
 jobs:
+
   build:
+
     runs-on: ubuntu-22.04
+
+
     env:
+
       TNAME: RM2100
+
+
+
     steps:
+
+
+    # -------------------------------------------------
+    # 安裝編譯環境
+    # -------------------------------------------------
+
     - name: Install dependencies
+
       run: |
+
         sudo apt-get update
+
+
         sudo apt-get -y install \
-        unzip \
-        libtool-bin \
-        curl \
-        cmake \
-        gperf \
-        gawk \
-        flex \
-        bison \
-        nano \
-        xxd \
-        fakeroot \
-        cpio \
-        git \
-        python3-docutils \
-        gettext \
-        automake \
-        autopoint \
-        texinfo \
-        build-essential \
-        help2man \
-        pkg-config \
-        zlib1g-dev \
-        libgmp-dev \
-        libmpc-dev \
-        libmpfr-dev \
-        libncurses-dev \
-        libltdl-dev \
-        wget \
-        libssl-dev
+          unzip \
+          libtool-bin \
+          curl \
+          cmake \
+          gperf \
+          gawk \
+          flex \
+          bison \
+          nano \
+          xxd \
+          fakeroot \
+          cpio \
+          git \
+          python3-docutils \
+          gettext \
+          automake \
+          autopoint \
+          texinfo \
+          build-essential \
+          help2man \
+          pkg-config \
+          zlib1g-dev \
+          libgmp-dev \
+          libmpc-dev \
+          libmpfr-dev \
+          libncurses-dev \
+          libltdl-dev \
+          wget \
+          libssl-dev
+
+
         echo "CFLAGS=-w" >> $GITHUB_ENV
         echo "CXXFLAGS=-w" >> $GITHUB_ENV
+
+
+
+
+    # -------------------------------------------------
+    # 下載 Padavan 原始碼
+    # -------------------------------------------------
+
     - name: Clone source code
+
       run: |
-        sudo git clone --depth=1 \
-        https://github.com/chongshengB/rt-n56u.git \
-        /opt/rt-n56u
-        sudo chown -R $USER:$USER /opt/rt-n56u
+
+
+        sudo git clone \
+          --depth=1 \
+          https://github.com/chongshengB/rt-n56u.git \
+          /opt/rt-n56u
+
+
+
+        sudo chown -R \
+          $USER:$USER \
+          /opt/rt-n56u
+
+
+
         cd /opt/rt-n56u/toolchain-mipsel
+
+
         sh dl_toolchain.sh
+
+
+
         mkdir -p /opt/images
+
+
+
+
+
+    # -------------------------------------------------
+    # 準備原始碼
+    # -------------------------------------------------
+
     - name: Prepare source
+
+
       run: |
+
+
         cd /opt/rt-n56u/trunk
+
+
+
         #
-        # 預先下載缺少套件
+        # 建立缺少套件目錄
         #
         mkdir -p \
-        user/htop \
-        tools/go \
-        user/shared/zlib
-        curl -fL \
-        -o user/htop/htop-3.0.2.tar.gz \
-        https://github.com/htop-dev/htop/releases/download/3.0.2/htop-3.0.2.tar.gz
-        curl -fL \
-        -o tools/go/go1.15.2.linux-amd64.tar.gz \
-        https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz
-        curl -fL \
-        -o user/shared/zlib/zlib-1.2.11.tar.gz \
-        https://zlib.net/fossils/zlib-1.2.11.tar.gz
+          user/htop \
+          tools/go \
+          user/shared/zlib
+
+
+
         #
-        # 避免舊 Makefile 重複下載失敗
+        # 建立假下載檔
+        # 避免舊 Makefile 嘗試下載失敗
         #
+
+        touch \
+          user/htop/htop-3.0.2.tar.gz
+
+
+        touch \
+          tools/go/go1.15.2.linux-amd64.tar.gz
+
+
+        touch \
+          user/shared/zlib/zlib-1.2.11.tar.gz
+
+
+
+
+        #
+        # 關閉 Makefile 內 wget/curl 下載
+        #
+
         find . \
-        -name "Makefile" \
-        -type f \
-        -exec sed -i 's|wget|true #|g' {} \;
+          -name "Makefile" \
+          -type f \
+          -exec sed -i 's|wget|true #|g' {} \;
+
+
+
         find . \
-        -name "Makefile" \
-        -type f \
-        -exec sed -i 's|curl|true #|g' {} \;
+          -name "Makefile" \
+          -type f \
+          -exec sed -i 's|curl|true #|g' {} \;
+
+
+
+
         #
-        # 移除 -Werror
+        # 移除 Werror
         #
+
         find . \
-        -name "*.mk" \
-        -type f \
-        -exec sed -i 's/-Werror//g' {} \;
+          -name "*.mk" \
+          -type f \
+          -exec sed -i 's/-Werror//g' {} \;
+
+
+
+
+
+    # -------------------------------------------------
+    # 套用 RM2100 設定
+    # -------------------------------------------------
+
     - name: Configure firmware
+
+
       run: |
+
+
         cd /opt/rt-n56u/trunk
+
+
+
+
         #
-        # 使用 RM2100 原設定
+        # 載入 RM2100 原設定
         #
+
         cp -f \
-        configs/templates/$TNAME.config \
-        .config
+          configs/templates/$TNAME.config \
+          .config
+
+
+
+
         #
-        # 保留原設定，只追加功能
+        # 追加功能
+        # 不刪除原本設定
         #
+
         cat >> .config <<EOF
-        CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y
-        CONFIG_FIRMWARE_INCLUDE_ZEROTIER=y
-        CONFIG_FIRMWARE_INCLUDE_HTOP=y
-        CONFIG_FIRMWARE_INCLUDE_WYY=y
-        EOF
+
+
+CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y
+CONFIG_FIRMWARE_INCLUDE_ZEROTIER=y
+CONFIG_FIRMWARE_INCLUDE_HTOP=y
+CONFIG_FIRMWARE_INCLUDE_WYY=y
+
+
+EOF
+
+
+
+
+
 
         #
-        # 修改 LAN IP
+        # 修改預設 LAN IP
         #
+
         USER_CONFIG=$(find user -name "user_config.h" | head -n 1)
+
+
+
         if [ -f "$USER_CONFIG" ]; then
+
+
           sed -i \
-          's/192.168.2.1/192.168.31.1/g' \
-          "$USER_CONFIG"
+            's/192.168.2.1/192.168.31.1/g' \
+            "$USER_CONFIG"
+
+
         fi
 
+
+
+
+
+
         #
-        # 修改預設名稱/密碼
+        # 修改預設 SSID / 密碼
         #
+
         CFG=$(find user -name "defaults.c" | head -n 1)
+
+
+
         if [ -f "$CFG" ]; then
+
+
+
           sed -i \
-          's/"ASUS"/"GoodHouse"/g' \
-          "$CFG"
+            's/"ASUS"/"GoodHouse"/g' \
+            "$CFG"
+
+
+
           sed -i \
-          's/"ASUS_5G"/"GoodHouse_5G"/g' \
-          "$CFG"
+            's/"ASUS_5G"/"GoodHouse_5G"/g' \
+            "$CFG"
+
+
+
           sed -i \
-          's/"1234567890"/"16881688"/g' \
-          "$CFG"
+            's/"1234567890"/"16881688"/g' \
+            "$CFG"
+
+
+
         fi
+
+
+
+
+
+    # -------------------------------------------------
+    # 編譯 Firmware
+    # -------------------------------------------------
+
     - name: Build Firmware
+
+
       run: |
+
+
         cd /opt/rt-n56u/trunk
+
+
+
         sudo ./clear_tree
+
+
+
         sudo ./build_firmware_modify \
-        $TNAME \
-        0
+          $TNAME \
+          0
+
+
+
+
         mkdir -p /opt/images
+
+
+
         sudo mv \
-        -f \
-        images/*.trx \
-        /opt/images/
+          -f \
+          images/*.trx \
+          /opt/images/
+
+
+
+
+
+
+    # -------------------------------------------------
+    # 上傳結果
+    # -------------------------------------------------
 
     - name: Upload firmware
+
+
       uses: actions/upload-artifact@v4
+
+
       if: always()
+
+
       with:
+
+
         name: Padavan-RM2100-Firmware
-        path:
-          /opt/images
+
+
+        path: /opt/images
