@@ -43,23 +43,23 @@ jobs:
       run: |
         cd /opt/rt-n56u/trunk
         
-        # 1. 強制確保目錄並修正下載方式
-        # 使用 -L 參數處理跳轉，並確保連結指向 .tar.gz 結尾的檔案
+        # 1. 改進的修復方式：不刪除 wget 行，改為將其替換為無效指令，維持 Makefile 結構完整
+        find . -name "Makefile" -type f -exec sed -i 's|wget|echo "skip wget"|g' {} +
+        
+        # 2. 預先下載檔案，確保編譯器能找到目標
         mkdir -p user/htop
         curl -L -o user/htop/htop-3.0.2.tar.gz https://github.com/htop-dev/htop/releases/download/3.0.2/htop-3.0.2.tar.gz
-        
         mkdir -p tools/go
         curl -L -o tools/go/go1.15.2.linux-amd64.tar.gz https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz
-        
-        # 2. 移除原有的 wget 下載指令，防止 Make 再次觸發失敗
-        find . -name "Makefile" -type f -exec sed -i '/wget/d' {} +
-        
-        # 3. 移除 Werror
+        mkdir -p user/shared/zlib
+        curl -L -o user/shared/zlib/zlib-1.2.11.tar.gz https://zlib.net/fossils/zlib-1.2.11.tar.gz
+
+        # 3. 移除 Werror 檢查
         find . -name "*.mk" -type f -exec sed -i 's/-Werror//g' {} +
         
         cp -f configs/templates/$TNAME.config .config
         
-        # 4. 寫入功能選單
+        # 4. 配置功能清單
         for i in MENTOHUST SCUTCLIENT SHADOWSOCKS SSSERVER DNSFORWARDER ADBYBY FRPC FRPS TUNSAFE ALIDDNS SMARTDNS SRELAY ZEROTIER; do
           sed -i "/CONFIG_FIRMWARE_INCLUDE_$i/d" .config
         done
