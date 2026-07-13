@@ -31,7 +31,6 @@ jobs:
 
     - name: Clone source code
       run: |
-        # 統一處理克隆路徑，避免路徑混淆
         git clone --depth=1 https://github.com/chongshengB/rt-n56u.git /opt/rt-n56u
         cd /opt/rt-n56u/toolchain-mipsel
         sh dl_toolchain.sh
@@ -42,23 +41,51 @@ jobs:
         TNAME: RM2100
       run: |
         cd /opt/rt-n56u/trunk
-        # 移除嚴格錯誤檢查
+        # 1. 修正下載連結，避開失效源
+        find . -name "Makefile" -exec sed -i 's|gomirrors.org/dl/go|dl.google.com/go|g' {} +
+        # 2. 強制移除 Werror
         find . -name "*.mk" -exec sed -i 's/-Werror//g' {} +
+        
         cp -f configs/templates/$TNAME.config .config
         
-        # 修正 user_config.h 的路徑查找：使用 find 確保一定能找到檔案
+        # 3. 刪除原有配置 (保持結構完整)
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_MENTOHUST/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_SSSERVER/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_DNSFORWARDER/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_ADBYBY/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_FRPC/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_FRPS/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_TUNSAFE/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_ALIDDNS/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_SMARTDNS/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_SRELAY/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_ZEROTIER/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_XRAY/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_DDNSTO/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_KOOLPROXY/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_CADDY/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_WYY/d' .config
+
+        # 4. 寫入功能配置
+        echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_ADBYBY=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_XRAY=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_DDNSTO=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_ZEROTIER=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_ALIDDNS=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_KOOLPROXY=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_CADDY=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_WYY=y" >> .config
+
+        # 5. 注入自定義設定 (路徑動態獲取)
         USER_CONFIG=$(find . -name "user_config.h" | head -n 1)
-        if [ -f "$USER_CONFIG" ]; then
-          sed -i 's/192.168.2.1/192.168.31.1/g' "$USER_CONFIG"
-        fi
+        [ -f "$USER_CONFIG" ] && sed -i 's/192.168.2.1/192.168.31.1/g' "$USER_CONFIG"
         
-        # 刪除並重新寫入 .config (採用循環以簡化程式碼)
-        for i in SHADOWSOCKS ADBYBY SMARTDNS ZEROTIER XRAY DDNSTO KOOLPROXY CADDY ADGUARDHOME WYY; do
-          sed -i "/CONFIG_FIRMWARE_INCLUDE_$i/d" .config
-          echo "CONFIG_FIRMWARE_INCLUDE_$i=y" >> .config
-        done
-        
-        # 修正 defaults.c 注入：確保檔案存在才修改
         CFG=$(find . -name "defaults.c" | grep "user/shared" | head -n 1)
         if [ -f "$CFG" ]; then
           sed -i 's/"admin"/"cliinf88"/' "$CFG"
