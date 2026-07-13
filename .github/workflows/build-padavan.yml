@@ -35,6 +35,18 @@ jobs:
       run: |
         git clone --depth=1 https://github.com/chongshengB/rt-n56u.git /opt/rt-n56u
 
+        cd /opt/rt-n56u/trunk/user/shared
+
+        echo "===== defaults.c BEFORE MODIFY ====="
+        grep -n "192.168" defaults.c || true
+        grep -n "admin" defaults.c || true
+        echo "===================================="
+
+
+        # 這裡先保留，等確認 defaults.c 內容後修改
+        # sed -i 's/xxx/xxx/g' defaults.c
+
+
         cd /opt/rt-n56u/toolchain-mipsel
         sh dl_toolchain.sh
 
