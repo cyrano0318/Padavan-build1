@@ -1,6 +1,6 @@
 name: Build Padavan
 
-on: 
+on:
   workflow_dispatch:
   release:
     types: [published]
@@ -13,82 +13,72 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    if: github.event.repository.owner.id == github.event.sender.id
 
     steps:
+
     - name: Checkout
-      uses: actions/checkout@v4
-    
+      uses: actions/checkout@master
+
+
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo apt-get update
-        # 補齊所有現代編譯依賴
         sudo apt-get -y install unzip libtool-bin curl cmake gperf gawk flex bison nano xxd fakeroot \
-        cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man \
-        pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget \
-        libssl-dev
-        echo "CFLAGS=-w" >> $GITHUB_ENV
-        echo "CXXFLAGS=-w" >> $GITHUB_ENV
+        cpio git python-docutils gettext automake autopoint texinfo build-essential help2man \
+        pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget
+
 
     - name: Clone source code
       run: |
-        sudo git clone --depth=1 https://github.com/chongshengB/rt-n56u.git /opt/rt-n56u
-        sudo chown -R $USER:$USER /opt/rt-n56u
+        git clone --depth=1 https://github.com/chongshengB/rt-n56u.git /opt/rt-n56u
+
+        cd /opt/rt-n56u/toolchain-mipsel
+        sh dl_toolchain.sh
+
+        mkdir -p /opt/images/
+
 
     - name: Build Firmware
       env:
         TNAME: RM2100
-      run: |
-        cd /opt/rt-n56u/trunk
-        
-        # 1. 強制讓 Makefile 跳過下載：將所有下載指令替換為 "true" (成功指令)
-        # 這能解決所有 wget/curl 失敗的問題，因為我們直接不讓它執行
-        find . -name "Makefile" -type f -exec sed -i 's|wget|true #|g' {} +
-        find . -name "Makefile" -type f -exec sed -i 's|curl|true #|g' {} +
-        
-        # 2. 強制移除編譯錯誤檢查，確保能硬編譯下去
-        find . -name "*.mk" -type f -exec sed -i 's/-Werror//g' {} +
-        
-        # 3. 解決 OpenSSL 偵測問題：強制指定路徑
-        sed -i 's|--with-ssl|--with-ssl=/usr|g' user/libs/libcurl/Makefile || true
-        
-        cp -f configs/templates/$TNAME.config .config
-        
-        # 4. 功能清單注入
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_/d' .config
-        cat >> .config <<EOF
-        CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y
-        CONFIG_FIRMWARE_INCLUDE_ADBYBY=y
-        CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y
-        CONFIG_FIRMWARE_INCLUDE_XRAY=y
-        CONFIG_FIRMWARE_INCLUDE_DDNSTO=y
-        CONFIG_FIRMWARE_INCLUDE_ZEROTIER=y
-        CONFIG_FIRMWARE_INCLUDE_ALIDDNS=y
-        CONFIG_FIRMWARE_INCLUDE_KOOLPROXY=y
-        CONFIG_FIRMWARE_INCLUDE_CADDY=y
-        CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=y
-        CONFIG_FIRMWARE_INCLUDE_WYY=y
-        EOF
 
-        # 5. 修改預設值
-        CFG=$(find . -name "defaults.c" | grep "user/shared" | head -n 1)
-        if [ -f "$CFG" ]; then
-          sed -i 's/"admin"/"cliinf88"/' "$CFG"
-          sed -i 's/"ASUS"/"GoodHouse"/' "$CFG"
-          sed -i 's/"ASUS_5G"/"GoodHouse_5G"/' "$CFG"
-          sed -i 's/"1234567890"/"16881688"/g' "$CFG"
+      run: |
+
+        cd /opt/rt-n56u/trunk
+
+
+        if [ ! -f configs/templates/$TNAME.config ] ; then
+          echo "configs/templates/$TNAME.config not found"
+          exit 1
         fi
-        
-        # 6. 開始編譯
+
+
+        cp -f configs/templates/$TNAME.config .config
+
+
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_ZEROTIER/d' .config
+
+        echo "CONFIG_FIRMWARE_INCLUDE_ZEROTIER=y" >> .config
+
+
         sudo ./clear_tree
+
+
         sudo ./build_firmware_modify $TNAME 0
-        mkdir -p /opt/images/
+
+
         sudo mv -f images/*.trx /opt/images/
 
+
     - name: Upload packages
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@master
+
       if: always()
+
       with:
-        name: Padavan-firmware
+        name: Padavan-RM2100
+
         path: /opt/images
