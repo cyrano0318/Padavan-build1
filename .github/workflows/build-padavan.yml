@@ -23,9 +23,11 @@ jobs:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo apt-get update
+        # 補齊所有編譯依賴，特別是 libssl-dev 與 zlib，解決 OpenSSL 偵測問題
         sudo apt-get -y install unzip libtool-bin curl cmake gperf gawk flex bison nano xxd fakeroot \
         cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man \
-        pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget
+        pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget \
+        libssl-dev libssl1.1
         echo "CFLAGS=-w" >> $GITHUB_ENV
         echo "CXXFLAGS=-w" >> $GITHUB_ENV
 
@@ -43,22 +45,23 @@ jobs:
       run: |
         cd /opt/rt-n56u/trunk
         
-        # 1. 直接預載所有依賴，並觸發「安裝標記」，讓 Makefile 以為已經下載成功，跳過下載步驟
-        mkdir -p user/htop && curl -L -o user/htop/htop-3.0.2.tar.gz https://github.com/htop-dev/htop/releases/download/3.0.2/htop-3.0.2.tar.gz
-        mkdir -p tools/go && curl -L -o tools/go/go1.15.2.linux-amd64.tar.gz https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz
-        mkdir -p user/shared/zlib && curl -L -o user/shared/zlib/zlib-1.2.11.tar.gz https://zlib.net/fossils/zlib-1.2.11.tar.gz
+        # 1. 強制預先下載所有依賴，避開 Makefile 裡的網路錯誤
+        # 這裡我們手動下載所有可能遺失的壓縮檔到指定目錄
+        mkdir -p user/htop tools/go user/shared/zlib
+        curl -L -o user/htop/htop-3.0.2.tar.gz https://github.com/htop-dev/htop/releases/download/3.0.2/htop-3.0.2.tar.gz
+        curl -L -o tools/go/go1.15.2.linux-amd64.tar.gz https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz
+        curl -L -o user/shared/zlib/zlib-1.2.11.tar.gz https://zlib.net/fossils/zlib-1.2.11.tar.gz
         
-        # 建立下載標記檔案，這是讓 Makefile 判斷已下載的關鍵
-        touch user/htop/htop-3.0.2.tar.gz
-        touch tools/go/go1.15.2.linux-amd64.tar.gz
-        touch user/shared/zlib/zlib-1.2.11.tar.gz
-
-        # 2. 移除所有 Werror，並修復編譯環境
+        # 2. 標記已下載，防止 Makefile 再去下載
+        touch user/htop/htop-3.0.2.tar.gz tools/go/go1.15.2.linux-amd64.tar.gz user/shared/zlib/zlib-1.2.11.tar.gz
+        
+        # 3. 徹底關閉所有 wget 依賴，避免循環依賴錯誤
+        find . -name "Makefile" -type f -exec sed -i 's|wget|echo "skip wget"|g' {} +
         find . -name "*.mk" -type f -exec sudo sed -i 's/-Werror//g' {} +
         
         cp -f configs/templates/$TNAME.config .config
         
-        # 3. 插件配置（使用 echo 直接追加，不破壞原有結構）
+        # 4. 配置功能清單
         sed -i '/CONFIG_FIRMWARE_INCLUDE_/d' .config
         cat >> .config <<EOF
         CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y
@@ -74,20 +77,12 @@ jobs:
         CONFIG_FIRMWARE_INCLUDE_WYY=y
         EOF
 
-        # 4. 系統變數注入
+        # 5. 修改系統參數
         USER_CONFIG=$(find . -name "user_config.h" | head -n 1)
         [ -f "$USER_CONFIG" ] && sudo sed -i 's/192.168.2.1/192.168.31.1/g' "$USER_CONFIG"
         
-        CFG=$(find . -name "defaults.c" | grep "user/shared" | head -n 1)
-        if [ -f "$CFG" ]; then
-          sudo sed -i 's/"admin"/"cliinf88"/' "$CFG"
-          sudo sed -i 's/"ASUS"/"GoodHouse"/' "$CFG"
-          sudo sed -i 's/"ASUS_5G"/"GoodHouse_5G"/' "$CFG"
-          sudo sed -i 's/"1234567890"/"16881688"/g' "$CFG"
-          sudo sed -i 's/"zerotier_enable", "0"/"zerotier_enable", "1"/' "$CFG"
-          sudo sed -i 's/"zerotier_id", ""/"zerotier_id", "6021298db4fa33c2"/' "$CFG"
-          sudo sed -i 's|"ForwardList", ""|"ForwardList", "1>0>10121>192.168.31.101>10121>Game1\\\\n1>0>10180>192.168.31.101>80>Web1"|' "$CFG"
-        fi
+        # 6. 最後處理：強制指向正確的編譯器路徑（解決 OpenSSL 問題）
+        export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig
         
         sudo ./clear_tree
         sudo ./build_firmware_modify $TNAME 0
