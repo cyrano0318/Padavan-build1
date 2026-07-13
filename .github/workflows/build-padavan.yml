@@ -41,21 +41,25 @@ jobs:
         TNAME: RM2100
       run: |
         cd /opt/rt-n56u/trunk
-        
-        # 1. 修復所有過期下載連結
-        find . -name "Makefile" -exec sed -i 's|bintray.com/htop/source/download|github.com/htop-dev/htop/releases/download|g' {} +
-        find . -name "Makefile" -exec sed -i 's|gomirrors.org/dl/go|dl.google.com/go|g' {} +
-        
-        # 2. 強制移除 Werror 以兼容新版 GCC
+
+        # 1. 預先下載所有易失敗的第三方套件，並移除自動下載指令，保證編譯不中斷
+        mkdir -p user/htop
+        wget -qO user/htop/htop-3.0.2.tar.gz https://github.com/htop-dev/htop/releases/download/3.0.2/htop-3.0.2.tar.gz
+        mkdir -p tools/go
+        wget -qO tools/go/go1.15.2.linux-amd64.tar.gz https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz
+        find . -name "Makefile" -exec sed -i '/wget/d' {} +
+
+        # 2. 移除所有編譯錯誤檢查
         find . -name "*.mk" -exec sed -i 's/-Werror//g' {} +
         
         cp -f configs/templates/$TNAME.config .config
         
-        # 3. 刪除並重新寫入功能配置
+        # 3. 清理預設配置項
         for i in MENTOHUST SCUTCLIENT SHADOWSOCKS SSSERVER DNSFORWARDER ADBYBY FRPC FRPS TUNSAFE ALIDDNS SMARTDNS SRELAY ZEROTIER; do
           sed -i "/CONFIG_FIRMWARE_INCLUDE_$i/d" .config
         done
         
+        # 4. 寫入功能選單
         echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_ADBYBY=y" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y" >> .config
@@ -68,7 +72,7 @@ jobs:
         echo "CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=y" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_WYY=y" >> .config
 
-        # 4. 注入系統設定
+        # 5. 注入系統設定
         USER_CONFIG=$(find . -name "user_config.h" | head -n 1)
         [ -f "$USER_CONFIG" ] && sed -i 's/192.168.2.1/192.168.31.1/g' "$USER_CONFIG"
         
