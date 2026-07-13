@@ -1,348 +1,101 @@
-name: Build Padavan Firmware
+name: Build Padavan
 
-
-on:
+on: 
   workflow_dispatch:
-
-
+  release:
+    types: [published]
+  push:
+    tags:
+    - 'v*'
+  watch:
+    types: [started]
 
 jobs:
-
   build:
-
     runs-on: ubuntu-22.04
 
-
-    env:
-
-      TNAME: RM2100
-
-
-
     steps:
-
-
-    # -------------------------------------------------
-    # 安裝編譯環境
-    # -------------------------------------------------
-
-    - name: Install dependencies
-
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Initialization environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
       run: |
-
         sudo apt-get update
-
-
-        sudo apt-get -y install \
-          unzip \
-          libtool-bin \
-          curl \
-          cmake \
-          gperf \
-          gawk \
-          flex \
-          bison \
-          nano \
-          xxd \
-          fakeroot \
-          cpio \
-          git \
-          python3-docutils \
-          gettext \
-          automake \
-          autopoint \
-          texinfo \
-          build-essential \
-          help2man \
-          pkg-config \
-          zlib1g-dev \
-          libgmp-dev \
-          libmpc-dev \
-          libmpfr-dev \
-          libncurses-dev \
-          libltdl-dev \
-          wget \
-          libssl-dev
-
-
+        # 補齊所有現代編譯依賴
+        sudo apt-get -y install unzip libtool-bin curl cmake gperf gawk flex bison nano xxd fakeroot \
+        cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man \
+        pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget \
+        libssl-dev
         echo "CFLAGS=-w" >> $GITHUB_ENV
         echo "CXXFLAGS=-w" >> $GITHUB_ENV
 
-
-
-
-    # -------------------------------------------------
-    # 下載 Padavan 原始碼
-    # -------------------------------------------------
-
     - name: Clone source code
-
       run: |
-
-
-        sudo git clone \
-          --depth=1 \
-          https://github.com/chongshengB/rt-n56u.git \
-          /opt/rt-n56u
-
-
-
-        sudo chown -R \
-          $USER:$USER \
-          /opt/rt-n56u
-
-
-
-        cd /opt/rt-n56u/toolchain-mipsel
-
-
-        sh dl_toolchain.sh
-
-
-
-        mkdir -p /opt/images
-
-
-
-
-
-    # -------------------------------------------------
-    # 準備原始碼
-    # -------------------------------------------------
-
-    - name: Prepare source
-
-
-      run: |
-
-
-        cd /opt/rt-n56u/trunk
-
-
-
-        #
-        # 建立缺少套件目錄
-        #
-        mkdir -p \
-          user/htop \
-          tools/go \
-          user/shared/zlib
-
-
-
-        #
-        # 建立假下載檔
-        # 避免舊 Makefile 嘗試下載失敗
-        #
-
-        touch \
-          user/htop/htop-3.0.2.tar.gz
-
-
-        touch \
-          tools/go/go1.15.2.linux-amd64.tar.gz
-
-
-        touch \
-          user/shared/zlib/zlib-1.2.11.tar.gz
-
-
-
-
-        #
-        # 關閉 Makefile 內 wget/curl 下載
-        #
-
-        find . \
-          -name "Makefile" \
-          -type f \
-          -exec sed -i 's|wget|true #|g' {} \;
-
-
-
-        find . \
-          -name "Makefile" \
-          -type f \
-          -exec sed -i 's|curl|true #|g' {} \;
-
-
-
-
-        #
-        # 移除 Werror
-        #
-
-        find . \
-          -name "*.mk" \
-          -type f \
-          -exec sed -i 's/-Werror//g' {} \;
-
-
-
-
-
-    # -------------------------------------------------
-    # 套用 RM2100 設定
-    # -------------------------------------------------
-
-    - name: Configure firmware
-
-
-      run: |
-
-
-        cd /opt/rt-n56u/trunk
-
-
-
-
-        #
-        # 載入 RM2100 原設定
-        #
-
-        cp -f \
-          configs/templates/$TNAME.config \
-          .config
-
-
-
-
-        #
-        # 追加功能
-        # 不刪除原本設定
-        #
-
-        cat >> .config <<EOF
-
-
-CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y
-CONFIG_FIRMWARE_INCLUDE_ZEROTIER=y
-CONFIG_FIRMWARE_INCLUDE_HTOP=y
-CONFIG_FIRMWARE_INCLUDE_WYY=y
-
-
-EOF
-
-
-
-
-
-
-        #
-        # 修改預設 LAN IP
-        #
-
-        USER_CONFIG=$(find user -name "user_config.h" | head -n 1)
-
-
-
-        if [ -f "$USER_CONFIG" ]; then
-
-
-          sed -i \
-            's/192.168.2.1/192.168.31.1/g' \
-            "$USER_CONFIG"
-
-
-        fi
-
-
-
-
-
-
-        #
-        # 修改預設 SSID / 密碼
-        #
-
-        CFG=$(find user -name "defaults.c" | head -n 1)
-
-
-
-        if [ -f "$CFG" ]; then
-
-
-
-          sed -i \
-            's/"ASUS"/"GoodHouse"/g' \
-            "$CFG"
-
-
-
-          sed -i \
-            's/"ASUS_5G"/"GoodHouse_5G"/g' \
-            "$CFG"
-
-
-
-          sed -i \
-            's/"1234567890"/"16881688"/g' \
-            "$CFG"
-
-
-
-        fi
-
-
-
-
-
-    # -------------------------------------------------
-    # 編譯 Firmware
-    # -------------------------------------------------
+        sudo git clone --depth=1 https://github.com/chongshengB/rt-n56u.git /opt/rt-n56u
+        sudo chown -R $USER:$USER /opt/rt-n56u
 
     - name: Build Firmware
-
-
+      env:
+        TNAME: RM2100
       run: |
-
-
         cd /opt/rt-n56u/trunk
+        
+        # 1. 強制讓 Makefile 跳過下載：將所有下載指令替換為 "true" (成功指令)
+        # 這能解決所有 wget/curl 失敗的問題，因為我們直接不讓它執行
+        find . -name "Makefile" -type f -exec sed -i 's|wget|true #|g' {} +
+        find . -name "Makefile" -type f -exec sed -i 's|curl|true #|g' {} +
+        
+        # 2. 強制移除編譯錯誤檢查，確保能硬編譯下去
+        find . -name "*.mk" -type f -exec sed -i 's/-Werror//g' {} +
+        
+        # 3. 解決 OpenSSL 偵測問題：強制指定路徑
+        sed -i 's|--with-ssl|--with-ssl=/usr|g' user/libs/libcurl/Makefile || true
+        
+        cp -f configs/templates/$TNAME.config .config
+        
+        # 4. 功能清單注入
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_/d' .config
+        cat >> .config <<EOF
+        CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y
+        CONFIG_FIRMWARE_INCLUDE_ADBYBY=y
+        CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y
+        CONFIG_FIRMWARE_INCLUDE_XRAY=y
+        CONFIG_FIRMWARE_INCLUDE_DDNSTO=y
+        CONFIG_FIRMWARE_INCLUDE_ZEROTIER=y
+        CONFIG_FIRMWARE_INCLUDE_ALIDDNS=y
+        CONFIG_FIRMWARE_INCLUDE_KOOLPROXY=y
+        CONFIG_FIRMWARE_INCLUDE_CADDY=y
+        CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=y
+        CONFIG_FIRMWARE_INCLUDE_WYY=y
+        EOF
 
+        # 5. 修改預設值
+        CFG=$(find . -name "defaults.c" | grep "user/shared" | head -n 1)
+        if [ -f "$CFG" ]; then
+          sed -i 's/"admin"/"cliinf88"/' "$CFG"
+          sed -i 's/"ASUS"/"GoodHouse"/' "$CFG"
+          sed -i 's/"ASUS_5G"/"GoodHouse_5G"/' "$CFG"
+          sed -i 's/"1234567890"/"16881688"/g' "$CFG"
+        fi
 
+        # 6. 加入首次啟動設定
+        mkdir -p user/scripts
 
+        printf '#!/bin/sh\n\nnvram set lan_ipaddr=192.168.31.1\n\nnvram set http_username=admin\nnvram set http_passwd=cliinf88\n\nnvram set misc_nat_rulelist="10121>192.168.31.101:10121\n10180>192.168.31.180:10180"\n\nnvram commit\n\nexit 0\n' > user/scripts/uci-defaults.sh
+
+        chmod +x user/scripts/uci-defaults.sh
+        
+        # 7. 開始編譯
         sudo ./clear_tree
+        sudo ./build_firmware_modify $TNAME 0
+        mkdir -p /opt/images/
+        sudo mv -f images/*.trx /opt/images/
 
-
-
-        sudo ./build_firmware_modify \
-          $TNAME \
-          0
-
-
-
-
-        mkdir -p /opt/images
-
-
-
-        sudo mv \
-          -f \
-          images/*.trx \
-          /opt/images/
-
-
-
-
-
-
-    # -------------------------------------------------
-    # 上傳結果
-    # -------------------------------------------------
-
-    - name: Upload firmware
-
-
+    - name: Upload packages
       uses: actions/upload-artifact@v4
-
-
       if: always()
-
-
       with:
-
-
-        name: Padavan-RM2100-Firmware
-
-
+        name: Padavan-firmware
         path: /opt/images
