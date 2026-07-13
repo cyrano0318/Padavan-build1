@@ -43,52 +43,50 @@ jobs:
       run: |
         cd /opt/rt-n56u/trunk
         
-        # 1. 改進的修復方式：不刪除 wget 行，改為將其替換為無效指令，維持 Makefile 結構完整
-        find . -name "Makefile" -type f -exec sed -i 's|wget|echo "skip wget"|g' {} +
+        # 1. 直接預載所有依賴，並觸發「安裝標記」，讓 Makefile 以為已經下載成功，跳過下載步驟
+        mkdir -p user/htop && curl -L -o user/htop/htop-3.0.2.tar.gz https://github.com/htop-dev/htop/releases/download/3.0.2/htop-3.0.2.tar.gz
+        mkdir -p tools/go && curl -L -o tools/go/go1.15.2.linux-amd64.tar.gz https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz
+        mkdir -p user/shared/zlib && curl -L -o user/shared/zlib/zlib-1.2.11.tar.gz https://zlib.net/fossils/zlib-1.2.11.tar.gz
         
-        # 2. 預先下載檔案，確保編譯器能找到目標
-        mkdir -p user/htop
-        curl -L -o user/htop/htop-3.0.2.tar.gz https://github.com/htop-dev/htop/releases/download/3.0.2/htop-3.0.2.tar.gz
-        mkdir -p tools/go
-        curl -L -o tools/go/go1.15.2.linux-amd64.tar.gz https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz
-        mkdir -p user/shared/zlib
-        curl -L -o user/shared/zlib/zlib-1.2.11.tar.gz https://zlib.net/fossils/zlib-1.2.11.tar.gz
+        # 建立下載標記檔案，這是讓 Makefile 判斷已下載的關鍵
+        touch user/htop/htop-3.0.2.tar.gz
+        touch tools/go/go1.15.2.linux-amd64.tar.gz
+        touch user/shared/zlib/zlib-1.2.11.tar.gz
 
-        # 3. 移除 Werror 檢查
-        find . -name "*.mk" -type f -exec sed -i 's/-Werror//g' {} +
+        # 2. 移除所有 Werror，並修復編譯環境
+        find . -name "*.mk" -type f -exec sudo sed -i 's/-Werror//g' {} +
         
         cp -f configs/templates/$TNAME.config .config
         
-        # 4. 配置功能清單
-        for i in MENTOHUST SCUTCLIENT SHADOWSOCKS SSSERVER DNSFORWARDER ADBYBY FRPC FRPS TUNSAFE ALIDDNS SMARTDNS SRELAY ZEROTIER; do
-          sed -i "/CONFIG_FIRMWARE_INCLUDE_$i/d" .config
-        done
-        
-        echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_ADBYBY=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_XRAY=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_DDNSTO=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_ZEROTIER=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_ALIDDNS=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_KOOLPROXY=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_CADDY=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_WYY=y" >> .config
+        # 3. 插件配置（使用 echo 直接追加，不破壞原有結構）
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_/d' .config
+        cat >> .config <<EOF
+        CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y
+        CONFIG_FIRMWARE_INCLUDE_ADBYBY=y
+        CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y
+        CONFIG_FIRMWARE_INCLUDE_XRAY=y
+        CONFIG_FIRMWARE_INCLUDE_DDNSTO=y
+        CONFIG_FIRMWARE_INCLUDE_ZEROTIER=y
+        CONFIG_FIRMWARE_INCLUDE_ALIDDNS=y
+        CONFIG_FIRMWARE_INCLUDE_KOOLPROXY=y
+        CONFIG_FIRMWARE_INCLUDE_CADDY=y
+        CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=y
+        CONFIG_FIRMWARE_INCLUDE_WYY=y
+        EOF
 
-        # 5. 注入設定
+        # 4. 系統變數注入
         USER_CONFIG=$(find . -name "user_config.h" | head -n 1)
-        [ -f "$USER_CONFIG" ] && sed -i 's/192.168.2.1/192.168.31.1/g' "$USER_CONFIG"
+        [ -f "$USER_CONFIG" ] && sudo sed -i 's/192.168.2.1/192.168.31.1/g' "$USER_CONFIG"
         
         CFG=$(find . -name "defaults.c" | grep "user/shared" | head -n 1)
         if [ -f "$CFG" ]; then
-          sed -i 's/"admin"/"cliinf88"/' "$CFG"
-          sed -i 's/"ASUS"/"GoodHouse"/' "$CFG"
-          sed -i 's/"ASUS_5G"/"GoodHouse_5G"/' "$CFG"
-          sed -i 's/"1234567890"/"16881688"/g' "$CFG"
-          sed -i 's/"zerotier_enable", "0"/"zerotier_enable", "1"/' "$CFG"
-          sed -i 's/"zerotier_id", ""/"zerotier_id", "6021298db4fa33c2"/' "$CFG"
-          sed -i 's|"ForwardList", ""|"ForwardList", "1>0>10121>192.168.31.101>10121>Game1\\\\n1>0>10180>192.168.31.101>80>Web1"|' "$CFG"
+          sudo sed -i 's/"admin"/"cliinf88"/' "$CFG"
+          sudo sed -i 's/"ASUS"/"GoodHouse"/' "$CFG"
+          sudo sed -i 's/"ASUS_5G"/"GoodHouse_5G"/' "$CFG"
+          sudo sed -i 's/"1234567890"/"16881688"/g' "$CFG"
+          sudo sed -i 's/"zerotier_enable", "0"/"zerotier_enable", "1"/' "$CFG"
+          sudo sed -i 's/"zerotier_id", ""/"zerotier_id", "6021298db4fa33c2"/' "$CFG"
+          sudo sed -i 's|"ForwardList", ""|"ForwardList", "1>0>10121>192.168.31.101>10121>Game1\\\\n1>0>10180>192.168.31.101>80>Web1"|' "$CFG"
         fi
         
         sudo ./clear_tree
