@@ -31,7 +31,8 @@ jobs:
 
     - name: Clone source code
       run: |
-        git clone --depth=1 https://github.com/chongshengB/rt-n56u.git /opt/rt-n56u
+        sudo git clone --depth=1 https://github.com/chongshengB/rt-n56u.git /opt/rt-n56u
+        sudo chown -R $USER:$USER /opt/rt-n56u
         cd /opt/rt-n56u/toolchain-mipsel
         sh dl_toolchain.sh
         mkdir -p /opt/images/
@@ -41,25 +42,26 @@ jobs:
         TNAME: RM2100
       run: |
         cd /opt/rt-n56u/trunk
-
-        # 1. 預先下載所有易失敗的第三方套件，並移除自動下載指令，保證編譯不中斷
-        mkdir -p user/htop
-        wget -qO user/htop/htop-3.0.2.tar.gz https://github.com/htop-dev/htop/releases/download/3.0.2/htop-3.0.2.tar.gz
-        mkdir -p tools/go
-        wget -qO tools/go/go1.15.2.linux-amd64.tar.gz https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz
-        find . -name "Makefile" -exec sed -i '/wget/d' {} +
-
-        # 2. 移除所有編譯錯誤檢查
-        find . -name "*.mk" -exec sed -i 's/-Werror//g' {} +
+        
+        # 1. 強制確保目錄權限與檔案下載 (採用絕對路徑防止權限錯誤)
+        sudo mkdir -p /opt/rt-n56u/trunk/user/htop
+        sudo mkdir -p /opt/rt-n56u/trunk/tools/go
+        sudo wget -O /opt/rt-n56u/trunk/user/htop/htop-3.0.2.tar.gz https://github.com/htop-dev/htop/releases/download/3.0.2/htop-3.0.2.tar.gz
+        sudo wget -O /opt/rt-n56u/trunk/tools/go/go1.15.2.linux-amd64.tar.gz https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz
+        
+        # 2. 徹底移除 Makefile 中的 wget 指令防止二次下載
+        find . -name "Makefile" -type f -exec sudo sed -i '/wget/d' {} +
+        
+        # 3. 移除 Werror
+        find . -name "*.mk" -type f -exec sudo sed -i 's/-Werror//g' {} +
         
         cp -f configs/templates/$TNAME.config .config
         
-        # 3. 清理預設配置項
+        # 4. 寫入功能選單
         for i in MENTOHUST SCUTCLIENT SHADOWSOCKS SSSERVER DNSFORWARDER ADBYBY FRPC FRPS TUNSAFE ALIDDNS SMARTDNS SRELAY ZEROTIER; do
           sed -i "/CONFIG_FIRMWARE_INCLUDE_$i/d" .config
         done
         
-        # 4. 寫入功能選單
         echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_ADBYBY=y" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y" >> .config
@@ -72,19 +74,19 @@ jobs:
         echo "CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=y" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_WYY=y" >> .config
 
-        # 5. 注入系統設定
+        # 5. 注入設定
         USER_CONFIG=$(find . -name "user_config.h" | head -n 1)
-        [ -f "$USER_CONFIG" ] && sed -i 's/192.168.2.1/192.168.31.1/g' "$USER_CONFIG"
+        [ -f "$USER_CONFIG" ] && sudo sed -i 's/192.168.2.1/192.168.31.1/g' "$USER_CONFIG"
         
         CFG=$(find . -name "defaults.c" | grep "user/shared" | head -n 1)
         if [ -f "$CFG" ]; then
-          sed -i 's/"admin"/"cliinf88"/' "$CFG"
-          sed -i 's/"ASUS"/"GoodHouse"/' "$CFG"
-          sed -i 's/"ASUS_5G"/"GoodHouse_5G"/' "$CFG"
-          sed -i 's/"1234567890"/"16881688"/g' "$CFG"
-          sed -i 's/"zerotier_enable", "0"/"zerotier_enable", "1"/' "$CFG"
-          sed -i 's/"zerotier_id", ""/"zerotier_id", "6021298db4fa33c2"/' "$CFG"
-          sed -i 's|"ForwardList", ""|"ForwardList", "1>0>10121>192.168.31.101>10121>Game1\\\\n1>0>10180>192.168.31.101>80>Web1"|' "$CFG"
+          sudo sed -i 's/"admin"/"cliinf88"/' "$CFG"
+          sudo sed -i 's/"ASUS"/"GoodHouse"/' "$CFG"
+          sudo sed -i 's/"ASUS_5G"/"GoodHouse_5G"/' "$CFG"
+          sudo sed -i 's/"1234567890"/"16881688"/g' "$CFG"
+          sudo sed -i 's/"zerotier_enable", "0"/"zerotier_enable", "1"/' "$CFG"
+          sudo sed -i 's/"zerotier_id", ""/"zerotier_id", "6021298db4fa33c2"/' "$CFG"
+          sudo sed -i 's|"ForwardList", ""|"ForwardList", "1>0>10121>192.168.31.101>10121>Game1\\\\n1>0>10180>192.168.31.101>80>Web1"|' "$CFG"
         fi
         
         sudo ./clear_tree
