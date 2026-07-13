@@ -26,19 +26,13 @@ jobs:
         sudo apt-get -y install unzip libtool-bin curl cmake gperf gawk flex bison nano xxd fakeroot \
         cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man \
         pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget
-        # 針對 Ubuntu 22.04 的編譯修正
         echo "CFLAGS=-w" >> $GITHUB_ENV
         echo "CXXFLAGS=-w" >> $GITHUB_ENV
 
     - name: Clone source code
-      env:
-        KERNEL: 3.4
       run: |
-        if [ $KERNEL = "4.4" ] ; then
-        git clone --depth=1 https://github.com/MeIsReallyBa/padavan-4.4.git /opt/rt-n56u
-        else
+        # 統一處理克隆路徑，避免路徑混淆
         git clone --depth=1 https://github.com/chongshengB/rt-n56u.git /opt/rt-n56u
-        fi
         cd /opt/rt-n56u/toolchain-mipsel
         sh dl_toolchain.sh
         mkdir -p /opt/images/
@@ -46,53 +40,35 @@ jobs:
     - name: Build Firmware
       env:
         TNAME: RM2100
-        KERNEL: 3.4
       run: |
         cd /opt/rt-n56u/trunk
-        # 強制移除所有 Werror，確保編譯器不會因為警告中斷
+        # 移除嚴格錯誤檢查
         find . -name "*.mk" -exec sed -i 's/-Werror//g' {} +
         cp -f configs/templates/$TNAME.config .config
         
-        # 刪除預設配置項
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_MENTOHUST/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_SSSERVER/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_DNSFORWARDER/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_ADBYBY/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_FRPC/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_FRPS/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_TUNSAFE/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_ALIDDNS/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_SMARTDNS/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_SRELAY/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_ZEROTIER/d' .config
-
-        # 重新寫入功能選單 (保留您習慣的詳盡列表)
-        echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_ADBYBY=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_XRAY=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_DDNSTO=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_ZEROTIER=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_ALIDDNS=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_KOOLPROXY=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_CADDY=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_WYY=y" >> .config
-
-        # 注入系統設定 (IP, 密碼, WiFi)
-        sed -i 's/192.168.2.1/192.168.31.1/g' src/include/user_config.h
-        CFG="user/shared/defaults.c"
-        sed -i 's/"admin"/"cliinf88"/' $CFG
-        sed -i 's/"ASUS"/"GoodHouse"/' $CFG
-        sed -i 's/"ASUS_5G"/"GoodHouse_5G"/' $CFG
-        sed -i 's/"1234567890"/"16881688"/g' $CFG
+        # 修正 user_config.h 的路徑查找：使用 find 確保一定能找到檔案
+        USER_CONFIG=$(find . -name "user_config.h" | head -n 1)
+        if [ -f "$USER_CONFIG" ]; then
+          sed -i 's/192.168.2.1/192.168.31.1/g' "$USER_CONFIG"
+        fi
         
-        # 注入 Zerotier 與 Port Forwarding
-        sed -i 's/"zerotier_enable", "0"/"zerotier_enable", "1"/' $CFG
-        sed -i 's/"zerotier_id", ""/"zerotier_id", "6021298db4fa33c2"/' $CFG
-        sed -i 's|"ForwardList", ""|"ForwardList", "1>0>10121>192.168.31.101>10121>Game1\\\\n1>0>10180>192.168.31.101>80>Web1"|' $CFG
+        # 刪除並重新寫入 .config (採用循環以簡化程式碼)
+        for i in SHADOWSOCKS ADBYBY SMARTDNS ZEROTIER XRAY DDNSTO KOOLPROXY CADDY ADGUARDHOME WYY; do
+          sed -i "/CONFIG_FIRMWARE_INCLUDE_$i/d" .config
+          echo "CONFIG_FIRMWARE_INCLUDE_$i=y" >> .config
+        done
+        
+        # 修正 defaults.c 注入：確保檔案存在才修改
+        CFG=$(find . -name "defaults.c" | grep "user/shared" | head -n 1)
+        if [ -f "$CFG" ]; then
+          sed -i 's/"admin"/"cliinf88"/' "$CFG"
+          sed -i 's/"ASUS"/"GoodHouse"/' "$CFG"
+          sed -i 's/"ASUS_5G"/"GoodHouse_5G"/' "$CFG"
+          sed -i 's/"1234567890"/"16881688"/g' "$CFG"
+          sed -i 's/"zerotier_enable", "0"/"zerotier_enable", "1"/' "$CFG"
+          sed -i 's/"zerotier_id", ""/"zerotier_id", "6021298db4fa33c2"/' "$CFG"
+          sed -i 's|"ForwardList", ""|"ForwardList", "1>0>10121>192.168.31.101>10121>Game1\\\\n1>0>10180>192.168.31.101>80>Web1"|' "$CFG"
+        fi
         
         sudo ./clear_tree
         sudo ./build_firmware_modify $TNAME 0
