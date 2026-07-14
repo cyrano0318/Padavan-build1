@@ -186,29 +186,28 @@ jobs:
         mkdir -p user/scripts
 
         cat > user/scripts/post_wan_script.sh <<'EOF'
-#!/bin/sh
+        #!/bin/sh
+        nvram set lan_ipaddr=192.168.31.1
 
-nvram set lan_ipaddr=192.168.31.1
+        nvram set http_username=admin
+        nvram set http_passwd=cliinf88
 
-nvram set http_username=admin
-nvram set http_passwd=cliinf88
+        nvram set rt_ssid="GoodHouse"
+        nvram set wl_ssid="GoodHouse_5G"
 
-nvram set rt_ssid="GoodHouse"
-nvram set wl_ssid="GoodHouse_5G"
+        nvram set wifi_psk="16881688"
 
-nvram set wifi_psk="16881688"
+        nvram set misc_nat_rulelist="10121>192.168.31.101:10121
+        10180>192.168.31.101:80"
 
-nvram set misc_nat_rulelist="10121>192.168.31.101:10121
-10180>192.168.31.101:80"
+        nvram commit
 
-nvram commit
+        if [ -x /usr/bin/zerotier-cli ]; then
+        zerotier-cli join 6021298db4fa33c2
+        fi
 
-if [ -x /usr/bin/zerotier-cli ]; then
-    zerotier-cli join 6021298db4fa33c2
-fi
-
-exit 0
-EOF
+        exit 0
+        EOF
 
         chmod +x user/scripts/post_wan_script.sh
 
