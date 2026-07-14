@@ -131,8 +131,8 @@ jobs:
         's#https://bintray.com/htop/source/download_file?file_path=htop-3.0.2.tar.gz#https://old-releases.ubuntu.com/ubuntu/pool/main/h/htop/htop_3.0.2.orig.tar.gz#g' {} \;
 
         echo "==== Check old download url ===="
-        grep -R "bintray.com" . || true
-        grep -R "gomirrors.org" . || true
+        grep -R "bintray.com" . 2>/dev/null || true
+        grep -R "gomirrors.org" . 2>/dev/null || true
         
         mkdir -p /opt/images
         ############################################################
