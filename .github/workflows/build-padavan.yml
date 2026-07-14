@@ -67,7 +67,6 @@ jobs:
           libssl-dev
 
 
-
     ############################################################
     # 下載 Padavan source
     ############################################################
@@ -93,7 +92,6 @@ jobs:
         ./dl_toolchain.sh
 
 
-
         ################################################
         # 確認 toolchain
         ################################################
@@ -112,43 +110,62 @@ jobs:
         fi
 
 
-
         cd /opt/rt-n56u/trunk
-
 
 
         ################################################
         # 修正失效下載來源
         ################################################
+
         find . -type f \
         \( -name "Makefile" -o -name "*.mk" \) \
         -exec sed -i \
         's#https://gomirrors.org/dl/go/#https://dl.google.com/go/#g' {} \;
+
 
         find . -type f \
         \( -name "Makefile" -o -name "*.mk" \) \
         -exec sed -i \
         's#https://bintray.com/htop/source/download_file?file_path=htop-3.0.2.tar.gz#https://old-releases.ubuntu.com/ubuntu/pool/main/h/htop/htop_3.0.2.orig.tar.gz#g' {} \;
 
+
         echo "==== Check old download url ===="
+
         grep -R "bintray.com" . 2>/dev/null || true
+
         grep -R "gomirrors.org" . 2>/dev/null || true
-        
+
+
         mkdir -p /opt/images
-        ############################################################
-        # 編譯 Firmware
-        ############################################################
-        - name: Build Firmware
-          env:
-            TNAME: RM2100
-            KERNEL: 3.4
-          run: |
-           cd /opt/rt-n56u/trunk
+
+    ############################################################
+    # 編譯 Firmware
+    ############################################################
+
+    - name: Build Firmware
+
+      env:
+
+        TNAME: RM2100
+
+        KERNEL: 3.4
+
+
+      run: |
+
+
+        cd /opt/rt-n56u/trunk
+
+
         ################################################
         # 預下載 Go
         ################################################
+
         mkdir -p tools/go
+
+
         if [ ! -f tools/go/go1.15.2.linux-amd64.tar.gz ]; then
+
           wget \
           --tries=5 \
           --timeout=30 \
@@ -156,12 +173,19 @@ jobs:
           --show-progress \
           https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz \
           -O tools/go/go1.15.2.linux-amd64.tar.gz
+
         fi
+
+
         ################################################
         # 預下載 htop
         ################################################
+
         mkdir -p user/htop
+
+
         if [ ! -f user/htop/htop-3.0.2.tar.gz ]; then
+
           wget \
           --tries=5 \
           --timeout=30 \
@@ -169,17 +193,27 @@ jobs:
           --show-progress \
           https://old-releases.ubuntu.com/ubuntu/pool/main/h/htop/htop_3.0.2.orig.tar.gz \
           -O user/htop/htop-3.0.2.tar.gz
+
         fi
 
+
         ls -lh tools/go/go1.15.2.linux-amd64.tar.gz
+
         ls -lh user/htop/htop-3.0.2.tar.gz
+
+
         ################################################
         # 載入 RM2100 設定
         ################################################
+
         if [ ! -f configs/templates/$TNAME.config ]; then
+
           echo "Missing RM2100 template"
+
           exit 1
+
         fi
+
 
         cp -f configs/templates/$TNAME.config .config
 
@@ -188,6 +222,7 @@ jobs:
         sed -i \
         's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=y/g' \
         .config
+
 
         ################################################
         # 清除舊功能設定
@@ -213,6 +248,7 @@ jobs:
         sed -i '/CONFIG_FIRMWARE_INCLUDE_WYY/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_XRAY/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_DDNSTO/d' .config
+
 
         ################################################
         # 加入功能
@@ -242,25 +278,37 @@ jobs:
         echo "CONFIG_FIRMWARE_INCLUDE_XRAY=y" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_DDNSTO=y" >> .config
 
+        echo "CONFIG_FIRMWARE_INCLUDE_DDNSTO=y" >> .config
+
+
         ################################################
         # 修改 RM2100 預設值
         ################################################
 
         DEFAULT_FILE=$(find . -name "defaults.c" | head -n 1)
 
+
         if [ -n "$DEFAULT_FILE" ]; then
+
           echo "Modify $DEFAULT_FILE"
 
+
           sed -i 's/ASUS_5G/GoodHouse_5G/g' "$DEFAULT_FILE"
+
           sed -i 's/ASUS/GoodHouse/g' "$DEFAULT_FILE"
+
           sed -i 's/1234567890/16881688/g' "$DEFAULT_FILE"
+
         fi
+
+
 
         ################################################
         # 開機自訂設定
         ################################################
 
         mkdir -p user/scripts
+
 
         cat > user/scripts/post_wan_script.sh <<'EOF'
         #!/bin/sh
@@ -285,27 +333,24 @@ jobs:
         ################################################
         # 開始編譯
         ################################################
-
         sudo ./clear_tree
-
         sudo ./build_firmware_modify $TNAME 0
-
+        ################################################
+        # 輸出 Firmware
+        ################################################
         mkdir -p /opt/images
-
         if ls images/*.trx >/dev/null 2>&1; then
           sudo mv -f images/*.trx /opt/images/
         else
           echo "No firmware generated"
           exit 1
         fi
-
-
+    ############################################################
+    # 上傳 Firmware
+    ############################################################
     - name: Upload packages
-
       uses: actions/upload-artifact@v4
-
       if: always()
-
       with:
         name: Padavan-RM2100
         path: /opt/images
