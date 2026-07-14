@@ -38,6 +38,7 @@ jobs:
         sudo apt-get install -y \
           unzip \
           libtool-bin \
+          autoconf \          
           curl \
           cmake \
           gperf \
@@ -180,25 +181,29 @@ jobs:
         ################################################
         # 預下載 htop
         ################################################
-
         mkdir -p user/htop
-
-
         if [ ! -f user/htop/htop-3.0.2.tar.gz ]; then
-
           wget \
           --tries=5 \
           --timeout=30 \
           --connect-timeout=20 \
           --show-progress \
-          https://old-releases.ubuntu.com/ubuntu/pool/main/h/htop/htop_3.0.2.orig.tar.gz \
+          https://github.com/htop-dev/htop/archive/refs/tags/3.0.2.tar.gz \
           -O user/htop/htop-3.0.2.tar.gz
-
+          fi
+        ################################################
+        # 產生 htop configure
+        ################################################
+        cd user/htop
+        rm -rf htop-3.0.2
+        tar zxf htop-3.0.2.tar.gz
+        cd htop-3.0.2
+        if [ ! -f configure ]; then
+          autoreconf -fi
         fi
-
+        cd ../../..
 
         ls -lh tools/go/go1.15.2.linux-amd64.tar.gz
-
         ls -lh user/htop/htop-3.0.2.tar.gz
 
 
