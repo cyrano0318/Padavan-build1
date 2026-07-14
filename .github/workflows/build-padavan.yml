@@ -1,16 +1,3 @@
-# RM2100 專用版
-# 預設：
-# LAN IP        : 192.168.31.1
-# 管理帳號      : admin
-# 管理密碼      : cliinf88
-# WiFi 2.4G     : GoodHouse
-# WiFi 5G       : GoodHouse_5G
-# WiFi 密碼     : 16881688
-# Zerotier      : 編譯內建
-# Port Forward  :
-#   10121 -> 192.168.31.101:10121
-#   10180 -> 192.168.31.101:80
-
 name: Build Padavan
 
 on:
@@ -80,9 +67,21 @@ jobs:
           git clone --depth=1 https://github.com/chongshengB/rt-n56u.git /opt/rt-n56u
         fi
 
+        #
+        # 下載 Toolchain
+        #
         cd /opt/rt-n56u/toolchain-mipsel
         chmod +x dl_toolchain.sh
         ./dl_toolchain.sh
+
+        #
+        # 修正失效的 Go Mirror
+        #
+        cd /opt/rt-n56u/trunk
+
+        find . -type f \( -name "Makefile" -o -name "*.mk" \) \
+          -exec sed -i \
+          's#https://gomirrors.org/dl/go/#https://dl.google.com/go/#g' {} +
 
         mkdir -p /opt/images
 
@@ -94,6 +93,20 @@ jobs:
 
         cd /opt/rt-n56u/trunk
 
+        #
+        # 預先下載 Go
+        # 避免 gomirrors.org 卡死
+        #
+        mkdir -p tools/go
+
+        if [ ! -f tools/go/go1.15.2.linux-amd64.tar.gz ]; then
+          wget -q --show-progress \
+            https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz \
+            -O tools/go/go1.15.2.linux-amd64.tar.gz
+        fi
+
+        ls -lh tools/go/go1.15.2.linux-amd64.tar.gz
+
         if [ ! -f configs/templates/$TNAME.config ]; then
           echo "configs/templates/$TNAME.config not found"
           exit 1
@@ -101,16 +114,11 @@ jobs:
 
         cp -f configs/templates/$TNAME.config .config
 
-        ####################################################################
-        # OpenSSL
-        ####################################################################
-
         sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=y/g' .config
 
-        ####################################################################
+        #
         # 清除舊設定
-        ####################################################################
-
+        #
         sed -i '/CONFIG_FIRMWARE_INCLUDE_MENTOHUST/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS/d' .config
@@ -129,10 +137,9 @@ jobs:
         sed -i '/CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_WYY/d' .config
 
-        ####################################################################
+        #
         # 功能設定
-        ####################################################################
-
+        #
         echo "CONFIG_FIRMWARE_INCLUDE_MENTOHUST=n" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT=n" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config
@@ -157,10 +164,9 @@ jobs:
         echo "CONFIG_FIRMWARE_INCLUDE_XRAY=y" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_DDNSTO=y" >> .config
 
-        ####################################################################
-        # 客製化預設值
-        ####################################################################
-
+        #
+        # WiFi / 密碼
+        #
         CFG=$(find . -name defaults.c | head -n 1)
 
         if [ -n "$CFG" ]; then
@@ -174,38 +180,41 @@ jobs:
 
         fi
 
-        ####################################################################
-        # 開機腳本
-        ####################################################################
-
+        #
+        # 客製化開機腳本
+        #
         mkdir -p user/scripts
 
         cat > user/scripts/post_wan_script.sh <<'EOF'
-        #!/bin/sh
-        nvram set lan_ipaddr=192.168.31.1
-        nvram set http_username=admin
-        nvram set http_passwd=cliinf88
-        nvram set rt_ssid="GoodHouse"
-        nvram set rt_guest_ssid="GoodHouse"
-        nvram set wl_ssid="GoodHouse_5G"
-        nvram set wl_guest_ssid="GoodHouse_5G"
-        nvram set wifi_psk="16881688"
-        nvram set misc_nat_rulelist="10121>192.168.31.101:10121
-        10180>192.168.31.101:80"
+#!/bin/sh
 
-        nvram commit
-        if [ -x /usr/bin/zerotier-cli ]; then
-        zerotier-cli join 6021298db4fa33c2
-        fi
-        exit 0
-        EOF
+nvram set lan_ipaddr=192.168.31.1
+
+nvram set http_username=admin
+nvram set http_passwd=cliinf88
+
+nvram set rt_ssid="GoodHouse"
+nvram set wl_ssid="GoodHouse_5G"
+
+nvram set wifi_psk="16881688"
+
+nvram set misc_nat_rulelist="10121>192.168.31.101:10121
+10180>192.168.31.101:80"
+
+nvram commit
+
+if [ -x /usr/bin/zerotier-cli ]; then
+    zerotier-cli join 6021298db4fa33c2
+fi
+
+exit 0
+EOF
 
         chmod +x user/scripts/post_wan_script.sh
 
-        ####################################################################
-        # Build
-        ####################################################################
-
+        #
+        # 開始編譯
+        #
         sudo ./clear_tree
         sudo ./build_firmware_modify $TNAME 0
 
