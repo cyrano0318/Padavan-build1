@@ -129,11 +129,10 @@ jobs:
 
 
 
-        find . -type f \
-        \( -name "Makefile" -o -name "*.mk" \) \
-        -exec sed -i \
-        's#https://bintray.com/htop/source/download_file?file_path=htop-3.0.2.tar.gz#https://github.com/htop-dev/htop/archive/refs/tags/3.0.2.tar.gz#g' {} \;
-
+          find . -type f \
+          \( -name "Makefile" -o -name "*.mk" \) \
+          -exec sed -i \
+          's#https://bintray.com/htop/source/download_file?file_path=htop-3.0.2.tar.gz#https://github.com/htop-dev/htop/releases/download/3.0.2/htop-3.0.2.tar.gz#g' {} \;
 
 
         echo "==== Check old download url ===="
@@ -206,40 +205,24 @@ jobs:
         if [ ! -f user/htop/htop-3.0.2.tar.gz ]; then
 
 
-          wget \
-          --tries=5 \
-          --timeout=30 \
-          --connect-timeout=20 \
-          --show-progress \
-          https://github.com/htop-dev/htop/archive/refs/tags/3.0.2.tar.gz \
-          -O user/htop/htop-3.0.2.tar.gz
-
-
+        wget \
+        --tries=5 \
+        --timeout=30 \
+        --connect-timeout=20 \
+        --show-progress \
+        https://github.com/htop-dev/htop/releases/download/3.0.2/htop-3.0.2.tar.gz \
+        -O user/htop/htop-3.0.2.tar.gz
         fi
 
-
-
         ls -lh tools/go/go1.15.2.linux-amd64.tar.gz
-
         ls -lh user/htop/htop-3.0.2.tar.gz
-
-
-
-
         ################################################
         # 載入 RM2100 設定
         ################################################
-
-
         if [ ! -f configs/templates/$TNAME.config ]; then
-
           echo "Missing RM2100 template"
-
           exit 1
-
         fi
-
-
 
         cp -f configs/templates/$TNAME.config .config
 
