@@ -1,6 +1,6 @@
 name: Build Padavan
 
-on: 
+on:
   workflow_dispatch:
   release:
     types: [published]
@@ -17,17 +17,17 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-    
+
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo apt-get update
-        # 補齊所有現代編譯依賴
         sudo apt-get -y install unzip libtool-bin curl cmake gperf gawk flex bison nano xxd fakeroot \
         cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man \
         pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget \
         libssl-dev
+
         echo "CFLAGS=-w" >> $GITHUB_ENV
         echo "CXXFLAGS=-w" >> $GITHUB_ENV
 
@@ -41,14 +41,38 @@ jobs:
         TNAME: RM2100
       run: |
         cd /opt/rt-n56u/trunk
-        
-        # 移除編譯錯誤檢查
+
+        #
+        # 修正已失效的 Go 下載來源
+        #
+        find . -type f \( -name "Makefile" -o -name "*.mk" \) \
+        -exec sed -i 's#https://gomirrors.org/dl/go/#https://dl.google.com/go/#g' {} +
+
+        #
+        # 預先下載 Go，避免 Makefile 使用失效鏡像
+        #
+        mkdir -p tools/go
+
+        if [ ! -f tools/go/go1.15.2.linux-amd64.tar.gz ]; then
+          curl -L --retry 5 --retry-delay 10 \
+          https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz \
+          -o tools/go/go1.15.2.linux-amd64.tar.gz
+        fi
+
+        ls -lh tools/go/go1.15.2.linux-amd64.tar.gz
+
+        #
+        # 移除 Werror
+        #
         find . -name "*.mk" -type f -exec sed -i 's/-Werror//g' {} +
-        
+
         cp -f configs/templates/$TNAME.config .config
-        
+
+        #
         # 功能清單注入
+        #
         sed -i '/CONFIG_FIRMWARE_INCLUDE_/d' .config
+
         cat >> .config <<EOF
         CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y
         CONFIG_FIRMWARE_INCLUDE_ADBYBY=y
@@ -63,20 +87,33 @@ jobs:
         CONFIG_FIRMWARE_INCLUDE_WYY=y
         EOF
 
+        #
         # 修改預設值
+        #
         CFG=$(find . -name "defaults.c" | grep "user/shared" | head -n 1)
+
         if [ -f "$CFG" ]; then
           sed -i 's/"admin"/"cliinf88"/' "$CFG"
           sed -i 's/"ASUS"/"GoodHouse"/' "$CFG"
           sed -i 's/"ASUS_5G"/"GoodHouse_5G"/' "$CFG"
           sed -i 's/"1234567890"/"16881688"/g' "$CFG"
         fi
-        
+
+        #
+        # 顯示 toolchain 狀態
+        #
+        echo "===== TOOLCHAIN CHECK ====="
+        find /opt/rt-n56u -name mipsel-linux-uclibc-gcc 2>/dev/null || true
+        find /opt/rt-n56u -type d -name "toolchain*" 2>/dev/null || true
+        echo "==========================="
+
+        #
         # 開始編譯
+        #
         sudo ./clear_tree
         sudo ./build_firmware_modify $TNAME 0
 
-        mkdir -p /opt/images/
+        mkdir -p /opt/images
 
         if ls images/*.trx >/dev/null 2>&1; then
           sudo mv -f images/*.trx /opt/images/
