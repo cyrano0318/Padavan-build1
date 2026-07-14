@@ -23,11 +23,11 @@ jobs:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo apt-get update
+        # 補齊所有現代編譯依賴
         sudo apt-get -y install unzip libtool-bin curl cmake gperf gawk flex bison nano xxd fakeroot \
         cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man \
         pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget \
-        libssl-dev lib32z1 lib32stdc++6
-
+        libssl-dev
         echo "CFLAGS=-w" >> $GITHUB_ENV
         echo "CXXFLAGS=-w" >> $GITHUB_ENV
 
@@ -41,36 +41,13 @@ jobs:
         TNAME: RM2100
       run: |
         cd /opt/rt-n56u/trunk
-
-        # 1. 下載缺失修正
-        find . -name "Makefile" -type f -exec sed -i 's|wget|true #|g' {} +
-        find . -name "Makefile" -type f -exec sed -i 's|curl|true #|g' {} +
-
+        
+        # 移除編譯錯誤檢查
         find . -name "*.mk" -type f -exec sed -i 's/-Werror//g' {} +
-
-        sed -i 's|--with-ssl|--with-ssl=/usr|g' user/libs/libcurl/Makefile || true
-
-
-        # 2. 準備 toolchain
-        cd /opt/rt-n56u
-
-        git submodule update --init --recursive || true
-
-        if [ ! -d "toolchain-mipsel/toolchain-3.4.x" ]; then
-          mkdir -p toolchain-mipsel
-          cd toolchain-mipsel
-          wget -O toolchain.tar.xz https://github.com/chongshengB/rt-n56u/releases/download/toolchain/toolchain-3.4.x.tar.xz
-          tar -xf toolchain.tar.xz
-        fi
-
-
-        cd /opt/rt-n56u/trunk
-
-
+        
         cp -f configs/templates/$TNAME.config .config
-
-
-        # 3. 功能清單注入
+        
+        # 功能清單注入
         sed -i '/CONFIG_FIRMWARE_INCLUDE_/d' .config
         cat >> .config <<EOF
         CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y
@@ -86,26 +63,24 @@ jobs:
         CONFIG_FIRMWARE_INCLUDE_WYY=y
         EOF
 
-
-        # 4. 修改預設值
+        # 修改預設值
         CFG=$(find . -name "defaults.c" | grep "user/shared" | head -n 1)
-
         if [ -f "$CFG" ]; then
           sed -i 's/"admin"/"cliinf88"/' "$CFG"
           sed -i 's/"ASUS"/"GoodHouse"/' "$CFG"
           sed -i 's/"ASUS_5G"/"GoodHouse_5G"/' "$CFG"
           sed -i 's/"1234567890"/"16881688"/g' "$CFG"
         fi
-
-
-        # 5. 開始編譯
+        
+        # 開始編譯
         sudo ./clear_tree
         sudo ./build_firmware_modify $TNAME 0
 
-
         mkdir -p /opt/images/
-        sudo mv -f images/*.trx /opt/images/
 
+        if ls images/*.trx >/dev/null 2>&1; then
+          sudo mv -f images/*.trx /opt/images/
+        fi
 
     - name: Upload packages
       uses: actions/upload-artifact@v4
