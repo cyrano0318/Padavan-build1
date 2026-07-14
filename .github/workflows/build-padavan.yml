@@ -25,20 +25,15 @@ jobs:
     ############################################################
     # 安裝編譯環境
     ############################################################
-
     - name: Initialization environment
-
       env:
         DEBIAN_FRONTEND: noninteractive
-
       run: |
-
         sudo apt-get update
-
         sudo apt-get install -y \
           unzip \
           libtool-bin \
-          autoconf \          
+          autoconf \
           curl \
           cmake \
           gperf \
