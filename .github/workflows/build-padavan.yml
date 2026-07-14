@@ -120,8 +120,6 @@ jobs:
         ################################################
         # 修正失效下載來源
         ################################################
-
-
         find . -type f \
         \( -name "Makefile" -o -name "*.mk" \) \
         -exec sed -i \
@@ -130,11 +128,12 @@ jobs:
         find . -type f \
         \( -name "Makefile" -o -name "*.mk" \) \
         -exec sed -i \
-        's#https://bintray.com/htop/source/download_file?file_path=htop-3.0.2.tar.gz#https://deb.debian.org/debian/pool/main/h/htop/htop_3.0.2.orig.tar.gz#g' {} \;
+        's#https://bintray.com/htop/source/download_file?file_path=htop-3.0.2.tar.gz#https://old-releases.ubuntu.com/ubuntu/pool/main/h/htop/htop_3.0.2.orig.tar.gz#g' {} \;
 
         echo "==== Check old download url ===="
         grep -R "bintray.com" . || true
         grep -R "gomirrors.org" . || true
+        
         mkdir -p /opt/images
         ############################################################
         # 編譯 Firmware
