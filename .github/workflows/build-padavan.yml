@@ -1,4 +1,4 @@
-name: Build Padavan
+name: Build Padavan RM2100
 
 on:
   workflow_dispatch:
@@ -10,8 +10,10 @@ on:
   watch:
     types: [started]
 
+
 jobs:
   build:
+
     runs-on: ubuntu-22.04
 
     steps:
@@ -19,13 +21,21 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+
+    ############################################################
+    # 安裝編譯環境
+    ############################################################
+
     - name: Initialization environment
+
       env:
         DEBIAN_FRONTEND: noninteractive
+
       run: |
+
         sudo apt-get update
 
-        sudo apt-get -y install \
+        sudo apt-get install -y \
           unzip \
           libtool-bin \
           curl \
@@ -56,69 +66,193 @@ jobs:
           wget \
           libssl-dev
 
+
+
+    ############################################################
+    # 下載 Padavan source
+    ############################################################
+
     - name: Clone source code
+
       env:
         KERNEL: 3.4
+
       run: |
 
-        if [ "$KERNEL" = "4.4" ]; then
-          git clone --depth=1 https://github.com/MeIsReallyBa/padavan-4.4.git /opt/rt-n56u
-        else
-          git clone --depth=1 https://github.com/chongshengB/rt-n56u.git /opt/rt-n56u
-        fi
+        git clone --depth=1 \
+          https://github.com/chongshengB/rt-n56u.git \
+          /opt/rt-n56u
 
-        #
-        # 下載 Toolchain
-        #
+
         cd /opt/rt-n56u/toolchain-mipsel
+
+
         chmod +x dl_toolchain.sh
+
+
         ./dl_toolchain.sh
 
-        #
-        # 修正失效的 Go Mirror
-        #
+
+
+        ################################################
+        # 確認 toolchain
+        ################################################
+
+        TOOLCHAIN=/opt/rt-n56u/toolchain-mipsel/toolchain-3.4.x/bin/mipsel-linux-uclibc-gcc
+
+
+        if [ ! -f "$TOOLCHAIN" ]; then
+
+          echo "ERROR: toolchain gcc missing"
+
+          find /opt/rt-n56u/toolchain-mipsel -name "*gcc"
+
+          exit 1
+
+        fi
+
+
+
         cd /opt/rt-n56u/trunk
 
-        find . -type f \( -name "Makefile" -o -name "*.mk" \) \
-          -exec sed -i \
-          's#https://gomirrors.org/dl/go/#https://dl.google.com/go/#g' {} +
+
+
+        ################################################
+        # 修正失效下載來源
+        ################################################
+
+
+        find . -type f \
+        \( -name "Makefile" -o -name "*.mk" \) \
+        -exec sed -i \
+        's#https://gomirrors.org/dl/go/#https://dl.google.com/go/#g' {} \;
+
+
+
+        find . -type f \
+        \( -name "Makefile" -o -name "*.mk" \) \
+        -exec sed -i \
+        's#https://bintray.com/htop/source/download_file?file_path=htop-3.0.2.tar.gz#https://github.com/htop-dev/htop/archive/refs/tags/3.0.2.tar.gz#g' {} \;
+
+
+
+        echo "==== Check old download url ===="
+
+        grep -R "bintray.com" . || true
+
+        grep -R "gomirrors.org" . || true
+
+
 
         mkdir -p /opt/images
 
+
+
+
+
+    ############################################################
+    # 編譯 Firmware
+    ############################################################
+
+
     - name: Build Firmware
+
       env:
+
         TNAME: RM2100
+
         KERNEL: 3.4
+
+
       run: |
+
 
         cd /opt/rt-n56u/trunk
 
-        #
-        # 預先下載 Go
-        # 避免 gomirrors.org 卡死
-        #
+
+
+        ################################################
+        # 預下載 Go
+        ################################################
+
+
         mkdir -p tools/go
 
+
         if [ ! -f tools/go/go1.15.2.linux-amd64.tar.gz ]; then
-          wget -q --show-progress \
-            https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz \
-            -O tools/go/go1.15.2.linux-amd64.tar.gz
+
+
+          wget \
+          --tries=5 \
+          --timeout=30 \
+          --connect-timeout=20 \
+          --show-progress \
+          https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz \
+          -O tools/go/go1.15.2.linux-amd64.tar.gz
+
+
         fi
+
+
+
+        ################################################
+        # 預下載 htop
+        ################################################
+
+
+        mkdir -p user/htop
+
+
+        if [ ! -f user/htop/htop-3.0.2.tar.gz ]; then
+
+
+          wget \
+          --tries=5 \
+          --timeout=30 \
+          --connect-timeout=20 \
+          --show-progress \
+          https://github.com/htop-dev/htop/archive/refs/tags/3.0.2.tar.gz \
+          -O user/htop/htop-3.0.2.tar.gz
+
+
+        fi
+
+
 
         ls -lh tools/go/go1.15.2.linux-amd64.tar.gz
 
+        ls -lh user/htop/htop-3.0.2.tar.gz
+
+
+
+
+        ################################################
+        # 載入 RM2100 設定
+        ################################################
+
+
         if [ ! -f configs/templates/$TNAME.config ]; then
-          echo "configs/templates/$TNAME.config not found"
+
+          echo "Missing RM2100 template"
+
           exit 1
+
         fi
+
+
 
         cp -f configs/templates/$TNAME.config .config
 
-        sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=y/g' .config
 
-        #
-        # 清除舊設定
-        #
+
+        sed -i \
+        's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=y/g' \
+        .config
+
+        ################################################
+        # 清除舊功能設定
+        ################################################
+
         sed -i '/CONFIG_FIRMWARE_INCLUDE_MENTOHUST/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS/d' .config
@@ -130,16 +264,20 @@ jobs:
         sed -i '/CONFIG_FIRMWARE_INCLUDE_TUNSAFE/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_ALIDDNS/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SMARTDNS/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SRELAY/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_ZEROTIER/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_KOOLPROXY/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_CADDY/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_WYY/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_XRAY/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_DDNSTO/d' .config
 
-        #
-        # 功能設定
-        #
+        ################################################
+        # 加入功能
+        ################################################
+
         echo "CONFIG_FIRMWARE_INCLUDE_MENTOHUST=n" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT=n" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config
@@ -164,68 +302,70 @@ jobs:
         echo "CONFIG_FIRMWARE_INCLUDE_XRAY=y" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_DDNSTO=y" >> .config
 
-        #
-        # WiFi / 密碼
-        #
-        CFG=$(find . -name defaults.c | head -n 1)
+        ################################################
+        # 修改 RM2100 預設值
+        ################################################
 
-        if [ -n "$CFG" ]; then
+        DEFAULT_FILE=$(find . -name "defaults.c" | head -n 1)
 
-          sed -i 's/"admin"/"cliinf88"/g' "$CFG" || true
+        if [ -n "$DEFAULT_FILE" ]; then
+          echo "Modify $DEFAULT_FILE"
 
-          sed -i 's/"ASUS"/"GoodHouse"/g' "$CFG" || true
-          sed -i 's/"ASUS_5G"/"GoodHouse_5G"/g' "$CFG" || true
-
-          sed -i 's/"1234567890"/"16881688"/g' "$CFG" || true
-
+          sed -i 's/ASUS_5G/GoodHouse_5G/g' "$DEFAULT_FILE"
+          sed -i 's/ASUS/GoodHouse/g' "$DEFAULT_FILE"
+          sed -i 's/1234567890/16881688/g' "$DEFAULT_FILE"
         fi
 
-        #
-        # 客製化開機腳本
-        #
+        ################################################
+        # 開機自訂設定
+        ################################################
+
         mkdir -p user/scripts
 
         cat > user/scripts/post_wan_script.sh <<'EOF'
         #!/bin/sh
-        nvram set lan_ipaddr=192.168.31.1
-
-        nvram set http_username=admin
-        nvram set http_passwd=cliinf88
-
-        nvram set rt_ssid="GoodHouse"
-        nvram set wl_ssid="GoodHouse_5G"
-
-        nvram set wifi_psk="16881688"
-
-        nvram set misc_nat_rulelist="10121>192.168.31.101:10121
-        10180>192.168.31.101:80"
-
-        nvram commit
-
+        nvram set lan_ipaddr="192.168.31.1"
+        nvram set http_username="admin"
+        nvram set http_passwd="cliinf88"
+        nvram set wl0_ssid="GoodHouse"
+        nvram set wl1_ssid="GoodHouse_5G"
+        nvram set wl0_wpa_psk="16881688"
+        nvram set wl1_wpa_psk="16881688"
+        nvram set misc_nat_rulelist="10121>192.168.31.101:10121 10180>192.168.31.101:80"
+        
         if [ -x /usr/bin/zerotier-cli ]; then
+        sleep 20
         zerotier-cli join 6021298db4fa33c2
         fi
-
+        nvram commit
         exit 0
         EOF
 
         chmod +x user/scripts/post_wan_script.sh
-
-        #
+        ################################################
         # 開始編譯
-        #
+        ################################################
+
         sudo ./clear_tree
+
         sudo ./build_firmware_modify $TNAME 0
 
         mkdir -p /opt/images
 
         if ls images/*.trx >/dev/null 2>&1; then
           sudo mv -f images/*.trx /opt/images/
+        else
+          echo "No firmware generated"
+          exit 1
         fi
 
+
     - name: Upload packages
+
       uses: actions/upload-artifact@v4
+
       if: always()
+
       with:
         name: Padavan-RM2100
         path: /opt/images
